@@ -9,10 +9,9 @@
 <body>
     <h1>LANxfer</h1>
 
-    <!-- Enhanced Upload Container -->
     <div class="upload-container" id="dropZone">
         <div class="upload-prompt">
-            <div class="upload-icon">📁</div>
+            <div class="upload-icon">🗃️</div>
             <div>Drag & drop files here</div>
             <div>or</div>
             <div class="file-input-wrapper">
@@ -21,7 +20,6 @@
             </div>
             <select id="recipientSelect">
                 <option value="Everyone">Everyone</option>
-                <!-- IPs will be dynamically added here -->
             </select>
         </div>
         <div class="selected-file" id="selectedFile"></div>
@@ -40,10 +38,10 @@
             </tr>
         </thead>
         <tbody>
-            <!-- Files will be dynamically added here -->
         </tbody>
     </table>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

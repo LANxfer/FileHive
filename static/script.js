@@ -1,26 +1,25 @@
-// Global variables for sorting
 let currentSort = {
     column: 'name',
     direction: 'asc'
 };
+
+// Pre-shared AES key (matches server’s SECRET_KEY)
+const SECRET_KEY_HEX = '546869734973415365637265744b657931323334353637383930313233343536'; // ThisIsASecretKey1234567890123456
 
 document.addEventListener("DOMContentLoaded", function () {
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const selectedFileDiv = document.getElementById('selectedFile');
     
-    // File input change handler
     fileInput.addEventListener('change', function(e) {
         handleFileSelect(e.target.files[0]);
     });
 
-    // Prevent default drag behaviors
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
-    // Highlight drop zone when item is dragged over it
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, highlight, false);
     });
@@ -29,37 +28,27 @@ document.addEventListener("DOMContentLoaded", function () {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
 
-    // Handle dropped files
     dropZone.addEventListener('drop', handleDrop, false);
 
-    // Add click handlers for sortable headers
     document.querySelectorAll('th.sortable').forEach(header => {
         header.addEventListener('click', () => {
             const column = header.dataset.sort;
-            
-            // Update sort direction
             if (currentSort.column === column) {
                 currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
             } else {
                 currentSort.column = column;
                 currentSort.direction = 'asc';
             }
-            
-            // Update header classes
             document.querySelectorAll('th.sortable').forEach(th => {
                 th.classList.remove('asc', 'desc');
             });
             header.classList.add(currentSort.direction);
-
-            // Fetch files with new sort parameters
             fetchFiles();
         });
     });
 
-    // Initial fetches
     fetchFiles();
     fetchIPs();
-    // Refresh IPs every 10 seconds
     setInterval(fetchIPs, 10000);
 });
 
@@ -126,10 +115,10 @@ function populateFileTable(files) {
         const row = document.createElement("tr");
         row.innerHTML = `
             <td>${index + 1}</td>
-            <td>${file.name}</td>
+            <td>${file.original_name}</td>
             <td>${file.size_fmt}</td>
             <td>${file.modified_fmt}</td>
-            <td><a href="/download/${file.name}" download>📥 Download</a></td>
+            <td><button onclick="downloadAndDecrypt('${file.name}', '${file.original_name}')">📥 Download</button></td>
         `;
         tableBody.appendChild(row);
     });
@@ -140,7 +129,6 @@ function fetchIPs() {
         .then(response => response.json())
         .then(ips => {
             const recipientSelect = document.getElementById('recipientSelect');
-            // Clear existing IPs except "Everyone"
             while (recipientSelect.options.length > 1) {
                 recipientSelect.remove(1);
             }
@@ -186,7 +174,6 @@ function uploadFile() {
         }
         alert(result.message || "File uploaded successfully!");
         fetchFiles();
-        // Reset the upload interface
         document.getElementById('selectedFile').style.display = 'none';
         fileInput.value = '';
         recipientSelect.value = 'Everyone';
@@ -195,4 +182,49 @@ function uploadFile() {
         console.error("Error uploading file:", error);
         alert("Error uploading file: " + error.message);
     });
+}
+
+function downloadAndDecrypt(encryptedFilename, originalFilename) {
+    fetch(`/download/${encryptedFilename}`)
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to fetch encrypted file');
+            return response.arrayBuffer();
+        })
+        .then(encryptedData => {
+            const encryptedBytes = new Uint8Array(encryptedData);
+            const iv = encryptedBytes.slice(0, 16);
+            const ciphertext = encryptedBytes.slice(16);
+
+            // Decrypt using CryptoJS
+            const key = CryptoJS.enc.Hex.parse(SECRET_KEY_HEX);
+            const ivWordArray = CryptoJS.lib.WordArray.create(iv);
+            const ciphertextWordArray = CryptoJS.lib.WordArray.create(ciphertext);
+
+            const decrypted = CryptoJS.AES.decrypt(
+                { ciphertext: ciphertextWordArray },
+                key,
+                { iv: ivWordArray, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+            );
+
+            // Convert decrypted data to binary
+            const decryptedHex = decrypted.toString(CryptoJS.enc.Hex);
+            const decryptedBytes = new Uint8Array(decryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+            // Create and download the file
+            const blob = new Blob([decryptedBytes], { type: 'application/octet-stream' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = originalFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            console.log(`Decrypted and downloaded ${originalFilename}`);
+        })
+        .catch(error => {
+            console.error("Error decrypting file:", error);
+            alert("Failed to decrypt and download file: " + error.message);
+        });
 }
