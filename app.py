@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import socket
 import uuid
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
+import threading
+import time
 
 app = Flask(__name__)
 
@@ -16,7 +18,9 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 files_db = []
-active_ips = set()  # Use a set to avoid duplicates
+# Dictionary to store IPs with their last-seen timestamps
+active_ips = {}  # Format: { "ip": timestamp }
+TIMEOUT_MINUTES = 0.1  # IPs older than 5 minutes are considered inactive
 
 # Pre-shared AES key (32 bytes for AES-256)
 SECRET_KEY = b'ThisIsASecretKey1234567890123456'
@@ -58,24 +62,47 @@ def encrypt_file(input_path, output_path):
         f.write(iv + ciphertext)
     return output_path
 
+def cleanup_inactive_ips():
+    while True:
+        current_time = datetime.now()
+        timeout = timedelta(minutes=TIMEOUT_MINUTES)
+        with threading.Lock():
+            # Remove IPs that haven't been active within the timeout period
+            active_ips_copy = active_ips.copy()
+            for ip, last_seen in active_ips_copy.items():
+                if current_time - last_seen > timeout:
+                    del active_ips[ip]
+            print(f"Active IPs after cleanup: {list(active_ips.keys())}")
+        time.sleep(60)  # Check every minute
+
+# Start the cleanup thread
+threading.Thread(target=cleanup_inactive_ips, daemon=True).start()
+
 @app.route('/')
 def index():
     global active_ips
-    active_ips.add(request.remote_addr)  # Track IP of every visitor
+    with threading.Lock():
+        active_ips[request.remote_addr] = datetime.now()  # Update timestamp
     return render_template('index.html')
 
 @app.route('/get_ips')
 def get_ips():
     global active_ips
-    active_ips.add(request.remote_addr)  # Track IP of this request
-    print(f"Active IPs: {list(active_ips)}")  # Debug output
-    return jsonify(list(active_ips))
+    with threading.Lock():
+        active_ips[request.remote_addr] = datetime.now()  # Update timestamp
+        current_time = datetime.now()
+        timeout = timedelta(minutes=TIMEOUT_MINUTES)
+        # Only return IPs that are still active
+        active_list = [ip for ip, ts in active_ips.items() if current_time - ts <= timeout]
+        print(f"Active IPs returned: {active_list}")
+        return jsonify(active_list)
 
 @app.route('/get_files')
 def get_files():
     global active_ips
     user_ip = request.remote_addr
-    active_ips.add(user_ip)  # Track IP of this request
+    with threading.Lock():
+        active_ips[user_ip] = datetime.now()  # Update timestamp
     try:
         user_files = [f for f in files_db if f["recipient"] == user_ip or f["recipient"] == "Everyone"]
         files = []
@@ -99,7 +126,8 @@ def get_files():
 def upload_file():
     global active_ips
     sender = request.remote_addr
-    active_ips.add(sender)  # Track IP of uploader
+    with threading.Lock():
+        active_ips[sender] = datetime.now()  # Update timestamp
     try:
         if 'file' not in request.files:
             return "No file part", 400
@@ -143,7 +171,8 @@ def upload_file():
 def download_file(filename):
     global active_ips
     user_ip = request.remote_addr
-    active_ips.add(user_ip)  # Track IP of downloader
+    with threading.Lock():
+        active_ips[user_ip] = datetime.now()  # Update timestamp
     file_info = next((f for f in files_db if f["encrypted_filename"] == filename), None)
 
     if not file_info:

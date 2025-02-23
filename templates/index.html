@@ -18,9 +18,12 @@
                 <input type="file" id="fileInput">
                 <button type="button">Choose File</button>
             </div>
-            <select id="recipientSelect">
-                <option value="Everyone">Everyone</option>
-            </select>
+            <div class="recipient-wrapper">
+                <select id="recipientSelect">
+                    <option value="Everyone">Everyone</option>
+                </select>
+                <button onclick="fetchIPs()" id="refreshIPsButton">Refresh IPs</button>
+            </div>
         </div>
         <div class="selected-file" id="selectedFile"></div>
         <button onclick="uploadFile()" id="uploadButton">Upload</button>

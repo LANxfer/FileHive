@@ -48,8 +48,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     fetchFiles();
-    fetchIPs();
-    setInterval(fetchIPs, 10000);
+    fetchIPs(); // Initial fetch only
+    // Removed setInterval(fetchIPs, 30000) - refresh is now manual via button
 });
 
 function preventDefaults(e) {
@@ -125,19 +125,25 @@ function populateFileTable(files) {
 }
 
 function fetchIPs() {
+    const recipientSelect = document.getElementById('recipientSelect');
+    const currentValue = recipientSelect.value; // Store current selection
+
     fetch('/get_ips')
         .then(response => response.json())
         .then(ips => {
-            const recipientSelect = document.getElementById('recipientSelect');
+            // Clear options except "Everyone"
             while (recipientSelect.options.length > 1) {
                 recipientSelect.remove(1);
             }
+            // Add IPs to dropdown
             ips.forEach(ip => {
                 const option = document.createElement('option');
                 option.value = ip;
                 option.textContent = ip;
                 recipientSelect.appendChild(option);
             });
+            // Restore the previous selection if it still exists, else default to "Everyone"
+            recipientSelect.value = (ips.includes(currentValue) && currentValue !== "Everyone") ? currentValue : "Everyone";
         })
         .catch(error => {
             console.error("Error fetching IPs:", error);

@@ -151,11 +151,23 @@ a:hover {
     padding: 10px;
     border-radius: 5px;
     margin-top: 10px;
-    width: 80%;
-    max-width: 300px;
+    width: 70%; /* Reduced width to fit beside button */
+    max-width: 250px;
 }
 
 #recipientSelect option {
     background: black;
     color: #33ff33;
+}
+
+.recipient-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Space between dropdown and button */
+    margin-top: 10px;
+}
+
+#refreshIPsButton {
+    padding: 10px 20px; /* Slightly smaller than other buttons */
+    margin-top: 0; /* Align with dropdown */
 }
