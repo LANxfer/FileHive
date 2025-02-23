@@ -3,8 +3,7 @@ let currentSort = {
     direction: 'asc'
 };
 
-// Pre-shared AES key (matches server’s SECRET_KEY)
-const SECRET_KEY_HEX = '546869734973415365637265744b657931323334353637383930313233343536'; // ThisIsASecretKey1234567890123456
+const SECRET_KEY_HEX = '546869734973415365637265744b657931323334353637383930313233343536';
 
 document.addEventListener("DOMContentLoaded", function () {
     const dropZone = document.getElementById('dropZone');
@@ -48,8 +47,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     fetchFiles();
-    fetchIPs(); // Initial fetch only
-    // Removed setInterval(fetchIPs, 30000) - refresh is now manual via button
+    fetchIPs();
 });
 
 function preventDefaults(e) {
@@ -82,6 +80,76 @@ function handleFileSelect(file) {
         selectedFileDiv.style.display = 'block';
         selectedFileDiv.textContent = `Selected: ${file.name}`;
     }
+}
+
+function uploadFile() {
+    const fileInput = document.getElementById("fileInput");
+    const recipientSelect = document.getElementById("recipientSelect");
+    const progressWrapper = document.querySelector(".progress-wrapper");
+    const progressBar = document.querySelector(".progress-bar");
+    const progressText = document.querySelector(".progress-text");
+    const file = fileInput.files[0];
+    const recipient = recipientSelect.value;
+
+    if (!file) {
+        alert("Please select a file first.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    if (recipient && recipient !== "Everyone") {
+        formData.append("recipient", recipient);
+    } else {
+        formData.append("recipient", "Everyone");
+    }
+
+    progressWrapper.style.display = "block";
+    progressText.textContent = "0%";
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            progressBar.style.width = `${percentComplete}%`;
+            progressText.textContent = `${percentComplete}%`;
+        }
+    });
+
+    xhr.addEventListener("load", () => {
+        if (xhr.status === 200) {
+            const result = JSON.parse(xhr.responseText);
+            if (result.error) {
+                throw new Error(result.error);
+            }
+            progressBar.style.width = "100%";
+            progressText.textContent = "Complete!";
+            progressBar.style.background = "linear-gradient(90deg, #33ff33, #00ffaa)";
+            
+            setTimeout(() => {
+                progressWrapper.style.display = "none";
+                progressBar.style.width = "0%";
+                progressBar.style.background = "linear-gradient(90deg, #33ff33, #00ff00)";
+                progressText.textContent = "0%";
+                alert(result.message || "File uploaded successfully!");
+                fetchFiles();
+                document.getElementById('selectedFile').style.display = 'none';
+                fileInput.value = '';
+                recipientSelect.value = 'Everyone';
+            }, 1000);
+        } else {
+            throw new Error("Upload failed");
+        }
+    });
+
+    xhr.addEventListener("error", () => {
+        progressWrapper.style.display = "none";
+        console.error("Error uploading file");
+        alert("Error uploading file");
+    });
+
+    xhr.open("POST", "/upload", true);
+    xhr.send(formData);
 }
 
 function fetchFiles() {
@@ -126,68 +194,25 @@ function populateFileTable(files) {
 
 function fetchIPs() {
     const recipientSelect = document.getElementById('recipientSelect');
-    const currentValue = recipientSelect.value; // Store current selection
+    const currentValue = recipientSelect.value;
 
     fetch('/get_ips')
         .then(response => response.json())
         .then(ips => {
-            // Clear options except "Everyone"
             while (recipientSelect.options.length > 1) {
                 recipientSelect.remove(1);
             }
-            // Add IPs to dropdown
             ips.forEach(ip => {
                 const option = document.createElement('option');
                 option.value = ip;
                 option.textContent = ip;
                 recipientSelect.appendChild(option);
             });
-            // Restore the previous selection if it still exists, else default to "Everyone"
             recipientSelect.value = (ips.includes(currentValue) && currentValue !== "Everyone") ? currentValue : "Everyone";
         })
         .catch(error => {
             console.error("Error fetching IPs:", error);
         });
-}
-
-function uploadFile() {
-    const fileInput = document.getElementById("fileInput");
-    const recipientSelect = document.getElementById("recipientSelect");
-    const file = fileInput.files[0];
-    const recipient = recipientSelect.value;
-
-    if (!file) {
-        alert("Please select a file first.");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    if (recipient && recipient !== "Everyone") {
-        formData.append("recipient", recipient);
-    } else {
-        formData.append("recipient", "Everyone");
-    }
-
-    fetch("/upload", {
-        method: "POST",
-        body: formData
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.error) {
-            throw new Error(result.error);
-        }
-        alert(result.message || "File uploaded successfully!");
-        fetchFiles();
-        document.getElementById('selectedFile').style.display = 'none';
-        fileInput.value = '';
-        recipientSelect.value = 'Everyone';
-    })
-    .catch(error => {
-        console.error("Error uploading file:", error);
-        alert("Error uploading file: " + error.message);
-    });
 }
 
 function downloadAndDecrypt(encryptedFilename, originalFilename) {
@@ -201,7 +226,6 @@ function downloadAndDecrypt(encryptedFilename, originalFilename) {
             const iv = encryptedBytes.slice(0, 16);
             const ciphertext = encryptedBytes.slice(16);
 
-            // Decrypt using CryptoJS
             const key = CryptoJS.enc.Hex.parse(SECRET_KEY_HEX);
             const ivWordArray = CryptoJS.lib.WordArray.create(iv);
             const ciphertextWordArray = CryptoJS.lib.WordArray.create(ciphertext);
@@ -212,11 +236,9 @@ function downloadAndDecrypt(encryptedFilename, originalFilename) {
                 { iv: ivWordArray, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
             );
 
-            // Convert decrypted data to binary
             const decryptedHex = decrypted.toString(CryptoJS.enc.Hex);
             const decryptedBytes = new Uint8Array(decryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 
-            // Create and download the file
             const blob = new Blob([decryptedBytes], { type: 'application/octet-stream' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');

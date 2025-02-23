@@ -64,6 +64,40 @@ h1, h2, h3 {
     display: none;
 }
 
+.progress-wrapper {
+    width: 100%;
+    margin: 10px 0;
+    display: none; /* Hidden by default */
+}
+
+.progress-container {
+    width: 100%;
+    background: rgba(51, 255, 51, 0.1);
+    border: 1px solid #33ff33;
+    border-radius: 20px;
+    height: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #33ff33, #00ff00);
+    position: absolute;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px #33ff33;
+}
+
+.progress-text {
+    width: 100%;
+    text-align: center;
+    color: #33ff33;
+    text-shadow: 0 0 5px #33ff33;
+    font-weight: bold;
+    margin-top: 5px; /* Space below the progress bar */
+}
+
 button {
     background: transparent;
     color: #33ff33;
@@ -150,9 +184,11 @@ a:hover {
     color: #33ff33;
     padding: 10px;
     border-radius: 5px;
-    margin-top: 10px;
-    width: 70%; /* Reduced width to fit beside button */
+    margin-top: 0;
+    width: 70%;
     max-width: 250px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
 }
 
 #recipientSelect option {
@@ -163,11 +199,13 @@ a:hover {
 .recipient-wrapper {
     display: flex;
     align-items: center;
-    gap: 10px; /* Space between dropdown and button */
+    gap: 10px;
     margin-top: 10px;
 }
 
 #refreshIPsButton {
-    padding: 10px 20px; /* Slightly smaller than other buttons */
-    margin-top: 0; /* Align with dropdown */
+    padding: 11px 20px;
+    margin-top: 0;
+    white-space: nowrap;
+    min-width: 150px;
 }
