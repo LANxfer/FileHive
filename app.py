@@ -2,8 +2,6 @@ from flask import Flask, render_template, request, jsonify, send_file
 import os
 from datetime import datetime
 import socket
-import subprocess
-import threading
 import uuid
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -18,7 +16,7 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 files_db = []
-active_ips = []
+active_ips = set()  # Use a set to avoid duplicates
 
 # Pre-shared AES key (32 bytes for AES-256)
 SECRET_KEY = b'ThisIsASecretKey1234567890123456'
@@ -60,59 +58,25 @@ def encrypt_file(input_path, output_path):
         f.write(iv + ciphertext)
     return output_path
 
-def scan_network():
-    global active_ips
-    while True:
-        try:
-            hostname = socket.gethostname()
-            local_ip = socket.gethostbyname(hostname)
-            network_prefix = ".".join(local_ip.split(".")[:-1])
-            temp_ips = []
-            lock = threading.Lock()
-
-            def ping_ip(ip):
-                if ip != local_ip:
-                    try:
-                        subprocess.check_output(
-                            ["ping", "-n", "1", "-w", "100", ip],
-                            stderr=subprocess.STDOUT,
-                            shell=True
-                        )
-                        with lock:
-                            temp_ips.append(ip)
-                    except:
-                        pass
-
-            threads = []
-            for i in range(1, 255):
-                ip = f"{network_prefix}.{i}"
-                t = threading.Thread(target=ping_ip, args=(ip,))
-                threads.append(t)
-                t.start()
-
-            for t in threads:
-                t.join()
-
-            with lock:
-                active_ips = temp_ips
-        except Exception as e:
-            print(f"Error scanning network: {e}")
-        threading.Event().wait(10)
-
-threading.Thread(target=scan_network, daemon=True).start()
-
 @app.route('/')
 def index():
+    global active_ips
+    active_ips.add(request.remote_addr)  # Track IP of every visitor
     return render_template('index.html')
 
 @app.route('/get_ips')
 def get_ips():
-    return jsonify(active_ips)
+    global active_ips
+    active_ips.add(request.remote_addr)  # Track IP of this request
+    print(f"Active IPs: {list(active_ips)}")  # Debug output
+    return jsonify(list(active_ips))
 
 @app.route('/get_files')
 def get_files():
+    global active_ips
+    user_ip = request.remote_addr
+    active_ips.add(user_ip)  # Track IP of this request
     try:
-        user_ip = request.remote_addr
         user_files = [f for f in files_db if f["recipient"] == user_ip or f["recipient"] == "Everyone"]
         files = []
         for file_info in user_files:
@@ -133,6 +97,9 @@ def get_files():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    global active_ips
+    sender = request.remote_addr
+    active_ips.add(sender)  # Track IP of uploader
     try:
         if 'file' not in request.files:
             return "No file part", 400
@@ -142,7 +109,6 @@ def upload_file():
             return "No selected file", 400
 
         recipient = request.form.get("recipient", "Everyone")
-        sender = request.remote_addr
 
         original_filename = file.filename
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], "temp_" + original_filename)
@@ -175,7 +141,9 @@ def upload_file():
 
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
+    global active_ips
     user_ip = request.remote_addr
+    active_ips.add(user_ip)  # Track IP of downloader
     file_info = next((f for f in files_db if f["encrypted_filename"] == filename), None)
 
     if not file_info:
